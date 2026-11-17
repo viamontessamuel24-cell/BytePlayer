@@ -1,0 +1,94 @@
+name: Build BytePlayer desde ZIP (Windows + Linux)
+
+# Coloca este archivo en .github/workflows/ y sube BytePlayer.zip a la raíz del repo.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descomprimir BytePlayer.zip
+        run: |
+          mkdir src
+          unzip -q BytePlayer.zip -d src
+          echo "PROJ=$(dirname "$(find src -name pubspec.yaml | head -n1)")" >> "$GITHUB_ENV"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generar windows/ si falta
+        working-directory: ${{ env.PROJ }}
+        run: |
+          if [ ! -d windows ]; then
+            flutter create --platforms=windows --project-name byteplayer --org com.byteabyte .
+          fi
+
+      - name: Compilar
+        working-directory: ${{ env.PROJ }}
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Incluir yt-dlp
+        working-directory: ${{ env.PROJ }}
+        run: curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -o build/windows/x64/runner/Release/yt-dlp.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BytePlayer-windows
+          path: ${{ env.PROJ }}/build/windows/x64/runner/Release/
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descomprimir BytePlayer.zip
+        run: |
+          mkdir src
+          unzip -q BytePlayer.zip -d src
+          echo "PROJ=$(dirname "$(find src -name pubspec.yaml | head -n1)")" >> "$GITHUB_ENV"
+
+      - name: Dependencias de Linux (GTK, libmpv)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev mpv libasound2-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generar linux/ si falta
+        working-directory: ${{ env.PROJ }}
+        run: |
+          if [ ! -d linux ]; then
+            flutter create --platforms=linux --project-name byteplayer --org com.byteabyte .
+          fi
+
+      - name: Compilar
+        working-directory: ${{ env.PROJ }}
+        run: |
+          flutter pub get
+          flutter build linux --release
+
+      - name: Incluir yt-dlp
+        working-directory: ${{ env.PROJ }}
+        run: |
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux" -o build/linux/x64/release/bundle/yt-dlp
+          chmod +x build/linux/x64/release/bundle/yt-dlp
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BytePlayer-linux
+          path: ${{ env.PROJ }}/build/linux/x64/release/bundle/
